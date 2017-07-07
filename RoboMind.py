@@ -1,9 +1,12 @@
 import can
 import time
-import struct
 import threading
+import struct
 import sys
-crash=False
+from ParamLists import *
+
+# Индикатор, в случае ошибки завершающий отправку онлайнов
+crash = False
 
 #### KOSTYIL PRODUCTION
 
@@ -11,122 +14,134 @@ class Onliner(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self) # Наследуем поточный класс
-        self.online_flag = False        # Онлайн флаг. Если True, то онлайны шлются, если False - не шлются
-        self.EXIT = False               # Выход он и есть выход
-        self.bus = can.interface.Bus(channel='can0', bustype='socketcan_native')  
+        self.online = False         # Если True, то онлайны шлются, если False - не шлются
+        self.exit = False               # Выход он и есть выход
 
-
-    def run(self):              # Функция запускаемая методом self.start()
+        # Объявляем переменную отвечающую за шину can0
+        self.bus = can.interface.Bus(channel = 'can0', bustype = 'socketcan_native')  
+        self.start()
+    ## Функция с циклом проверки онлайн флага и отправки онлайн метки
+    def run(self):              
         global crash
-        while not (self.EXIT or crash) :    # Цикл проверки онлайн флага и отправки онлайн метки
-            if self.online_flag:
-                self.Send_online()
+        while not (self.exit or crash):    
+            if self.online:
+                self.SendOnline()
                 print("online")
-            else:
-                time.sleep(1)
+            time.sleep(1)
 
-    def Send_online(self):      # Отправка онлайн метки
-        online_msg = can.Message(arbitration_id=0x600, extended_id=False, data=[]) # Преобразование сообщения в нужную форму (can frame)
-        self.bus.send(online_msg)
-        time.sleep(1)
+    ## Отправка онлайн метки
+    def SendOnline(self):      
+        # Формируем сообщение
+        onlineMsg = can.Message(arbitration_id = 0x600, extended_id = False, data = []) 
+        self.bus.send(onlineMsg)
+        
 
 
 #### CONTROLLERS
-    
-class Base_Controller():    # Базовый контроллер. В него вписывается то, что является общим для всех контроллеров
 
-    def __init__(self, can_addr):
+# Базовый контроллер. В него вписывается то, что является общим для всех контроллеров
+class ControllerBase():    
 
-        self.can_addr = can_addr
-        self.EXIT = False
+    def __init__(self, canAddr):
+
+        # Лист параметров
+        self.ParamList = {}
+
+        # Адресс устройства
+        self.CanAddr = canAddr
         
-        ## Подключаемся к шине
-        self.bus = can.interface.Bus(channel='can0', bustype='socketcan_native')  
+        self.exit = False
+        
+        # Подключаемся к шине
+        self.Bus = can.interface.Bus(channel = 'can0', bustype = 'socketcan_native')  
 
-    ## Отправка сообщения в шину
+    # Работа с парамлистом
+    
+    # Отправка сообщения в шину
     def Send(self, msg):
         try:
-            self.bus.send(msg)       # Библиотечная функция отправки сообщения
-#            time.sleep(0.05)
+            self.Bus.send(msg)       # Библиотечная функция отправки сообщения
         except OSError:
             print("Sending error")
             time.sleep(1)
 
-    ## Получение сообщения из шины
+    # Получение сообщения из шины
     def Recv(self):
         try:
-            msg = self.bus.recv()    # Библиотечная функция получения сообщения
+            msg = self.Bus.recv()    # Библиотечная функция получения сообщения
         except OSError:
             print("Reciving error")
         return msg
 
-    def Thread_to_recv(self):
+    # Функция запускаемая в потоке. Отвечает за прием сообщений
+    def ThreadRecv(self):
         global crash
-        can_msg = struct.Struct("=8H")  # Зависит от формата посылаемых сообщений        
+        CanMsg = struct.Struct("=8H")  # Формат посылаемых сообщений        
 
-        while not (self.EXIT or crash):
-            InMsg = self.Recv()
-            self.recv_msg = can_msg.unpack(InMsg.data)
-            print(1)
+        while not (self.exit or crash):
+            inMsg = self.Recv()                      # Получение сообщения
+            self.recvMsg = CanMsg.unpack(inMsg.data) # Распаковка сообщения
 
-    def Start_recv(self):
-        th = threading.Thread(target = Thread_to_recv)
-        th.start()
-        self.Start_recv = self.Vacuum                
+    def StartRecv(self):
+        RecvThread = threading.Thread(target = ThreadRecv)
+        RecvThread.start()
+        self.StartRecv = self.Vacuum                
 
-    ## Для блокирования доступа к ф-ии присваиваем ей значение vacuum
+    # Для блокирования доступа к ф-ии присваиваем ей значение пустой функции
+
+    def Pack(self):                         # Упаковка сообщения
+        return Handlerissimo(self)
+        
 
     def Vacuum(self):
         pass
 
-    ## Скрытая Фишка
+    # Скрытая Фишка
     def FootPrint(self):
         print('AAAAAPCHI')
 
-class Motor_Controller(Base_Controller):    # Контроллер моторов
+# Контроллер моторов
+class ControllerMotor(ControllerBase):    
 
     def __init__(self, addr = 0):
         try:
-            assert(0<=addr<9), ("ERROR adress controller")
-            Base_Controller.__init__(self, 0x200+addr)      # Наследуем базовый контроллер
+            # Возможные адреса лежат в диапазоне 0-8
+            assert(0 <= addr < 9), ("ERROR adress controller")
+            ControllerBase.__init__(self, 0x200 + addr)      
         except:            
             global crash
             print("Crashed")
-            crash=True
+            crash = True
             sys.exit(1)
         
-    def Mode(self, work_mode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - включить ручной режим, 0 - пока используется как выключение ручного режима)
+    def Mode(self, workMode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - включить ручной режим, 0 - пока используется как выключение ручного режима)
         
-        init_message = can.Message(arbitration_id=self.can_addr, extended_id=False,      # extended_id - фолс - 11 бит, тру - 29 
-                      data = [200, work_mode])  
-        self.Send(init_message)
+        initMessage = can.Message(arbitration_id = self.CanAddr, extended_id = False,      # extended_id - фолс - 11 бит, тру - 29 
+                                  data = [200, workMode])  
+        self.Send(initMessage)
 
-    def Set_motor_speed(self, motor_number, speed): # Установить скорость мотора (0 и 1)
-        data = self.Pack(motor_number+10, speed)    # Пакуем сообщение, чтобы переслать его в корректном виде
+    def SetMotorSpeed(self, motorNumber, speed): # Установить скорость мотора (0 и 1)
+        self.motorNumber, self.speed, self.prmNumber = motorNumber, speed, 0xCF
+        
+        data = self.Pack()    # Пакуем сообщение, чтобы переслать его в корректном виде
         self.Send(data)  
 
 ################## КАК ЗАДАВАТЬ ШИМ? ############
-    def Set_motor_PWM(self, motor_number, PWM): 
+    def SetMotorPWM(self, motorNumber, PWM): 
         pass
 #################################################
 
-    def Pack(self, prm_number, prm):                         # Упаковка сообщения
-        if ((prm_number == 10) or (prm_number == 11)):       # Если сообщение - установка скорости моторов (10,11)
-            typeSpeed = struct.Struct('=2b h')               # Структура сообщения
-            packed_data = typeSpeed.pack(prm_number, 2, prm) # Упаковываем сообщение
-            packed_message = can.Message(arbitration_id=self.can_addr, extended_id=False,      # extended_id - фолс - 11 бит, тру - 29 
-                      data = packed_data)
-            return packed_message                            # Возвращаем упакованное сообщение
-        else:
-            print("Not Packed")
 
-class Stepper_Controller(Base_Controller):
+
+### Не используется в связи с не готовностью
+            
+class ControllerStepper(ControllerBase):
 
     def __init__(self, addr = 0):
 
-        assert(0<=addr<9), ("ERROR adress controller")
+        assert(0 <= addr < 9), ("ERROR adress controller")
 
-        Base_Controller.__init__(self, 0x230+addr)      # Наследуем базовый контроллер
+        ControllerBase.__init__(self, 0x230+addr)      # Наследуем базовый контроллер
 
             
     def Mode(self, work_mode):
