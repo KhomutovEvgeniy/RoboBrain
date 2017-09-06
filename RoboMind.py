@@ -21,6 +21,9 @@ DT_STRING = 8
 DT_PTR = 9
 DT_BITMASK = 10 # битовая маска,
 DT_RAW = 11 # просто байты
+
+# Магическое число (любое число от 0 до 255) для проверки подключения
+MagicNumber = 42
                 
 
 #### KOSTYIL PRODUCTION
@@ -49,7 +52,17 @@ class Onliner(threading.Thread):
         # Формируем сообщение
         onlineMsg = can.Message(arbitration_id = 0x600, extended_id = False, data = []) 
         self.bus.send(onlineMsg)
-        
+
+
+# Проверка наличия устройств, включенные устройства отвечают на эту команду
+def IsAnybodyHere():
+    self.bus = can.interface.Bus(channel = 'can0', bustype = 'socketcan_native')  
+    AskMsg = can.Message(arbitration_id = 0x500, extended_id = False, data = []) 
+    self.bus.send(AskMsg)
+    
+
+
+
 
 
 #### CONTROLLERS
@@ -59,54 +72,74 @@ class ControllerBase():
 
     def __init__(self, canAddr):
 
+        # Статус подключения
+        self.isConnected = False
+        
         # Список параметров
-        self.ParamList = {}
+        self.ParamList = {0x00:['Test Param', DT_UINT8]}
         
         # Список команд
-        self.CommandList = {}
+        self.CommandList = {
+                # Команды управления
+                 # name, type, length
+            0xC8:['send parametr', DT_UINT8],
+            0xC9:['send parameters'],
+            0xCA:['write in EEPROM'],
+            0xCB:['read from EEPROM'],
+                        }
 
         # Адресс устройства
         self.CanAddr = canAddr
 
+        # Функции обратного вызова
+        self.onGetParam = None # При принятии параметра вызывается функция onGetParam, если она определена пользователем
+        self.onSetParam = None # При задании параметра
+        self.onSendCommand = None # При даче команды
+
+        self.callbacksList = None # Список калбэков
+        
         self.exit = False
         
         # Подключаемся к шине
         self.Bus = can.interface.Bus(channel = 'can0', bustype = 'socketcan_native')  
 
-        self.StartRecv()    # Запускаем поток прослушивания шины 
+        self.StartRecv()    # Запускаем поток прослушивания шины
+    
+        self.CheckConnection()  # Выполняем проверку соединения 
 
-    # Работа с парамлистом
+
+    # Работа со словарем параметров
 
     def GetStructParam(self, prmType):    # Выявляем длину и структуру параметра запрошенного типа
 
         prmLength = -1
         
         if prmType == (DT_UINT8 or DT_BITMASK):
-            prmStruct = struct.Struct('=2b B')
+            prmStruct = struct.Struct('=2B B')
             prmLength = 1
                 
         elif prmType == DT_INT8:
-            prmStruct = struct.Struct('=2b b')
+            prmStruct = struct.Struct('=2B b')
             prmLength = 1
 
         elif prmType == DT_UINT16:
-            prmStruct = struct.Struct('=2b H')
+            prmStruct = struct.Struct('=2B H')
             prmLength = 2
 
         elif prmType == DT_INT16:
-            prmStruct = struct.Struct('=2b h')
+            prmStruct = struct.Struct('=2B h')
             prmLength = 2
 
         elif prmType == DT_UINT32:
-            prmStruct = struct.Struct('=2b L')
+            prmStruct = struct.Struct('=2B L')
             prmLength = 4
 
         elif prmType == DT_INT32:
-            prmStruct = struct.Struct('=2b l')
+            prmStruct = struct.Struct('=2B l')
             prmLength = 4
 
         elif prmType == DT_FLOAT:
-            prmStruct = struct.Struct('=2b f')
+            prmStruct = struct.Struct('=2B f')
             prmLength = 4
 
         else:
@@ -148,35 +181,68 @@ class ControllerBase():
             packedMessage = can.Message(arbitration_id = self.CanAddr,
                                         extended_id = False,       
                                         data = packedPrm)
-
             self.Send(packedMessage)
-        
 
-    # Обработчики
+            # Обработчик событий
+            if self.onSetParam != None:
+                self.onSetParam(prmNumber, value)
+            
+        else:
+            print('Can`t found param with that number:%d' % prmNumber)
+
+
+            
+    # Работа со словарем команд
     
-    def UInt8Int16Handler(self):
-        datatype = struct.Struct('=2b B h')              # Структура сообщения
-        packedData = datatype.pack(self.prmNumber, 3, self.prm, self.prm2)  # Упаковываем сообщение
-
-        # extended_id - фолс - 11 бит, тру - 29
-        packedMessage = can.Message(arbitration_id = self.CanAddr,
-                                    extended_id = False,       
-                                    data = packedData)
+    def GetStructCommand(self, cmdNumber):  # Функция определяющая структуру и длину команды
+        structString = ('=B')
         
-        return packedMessage    # Возвращаем упакованное сообщение
+        for cmdParamType in self.CommandList[cmdNumber][1:]:
 
-    
-    def Int16Int16Handler(self):
-        datatype = struct.Struct('=2b h h')              # Структура сообщения
-        packedData = datatype.pack(self.prmNumber, 4, self.prm, self.prm2)  # Упаковываем сообщение
+            if cmdParamType == DT_UINT8:
+                structString = structString + (' B')
+                        
+            elif cmdParamType == DT_INT8:
+                structString = structString + (' b')
 
-        # extended_id - фолс - 11 бит, тру - 29
-        packedMessage = can.Message(arbitration_id = self.CanAddr,
-                                    extended_id = False,       
-                                    data = packedData)
+            elif cmdParamType == DT_UINT16:
+                structString = structString + (' H')
+
+            elif cmdParamType == DT_INT16:
+                structString = structString + (' h')
+
+            elif cmdParamType == DT_UINT32:
+                structString = structString + (' I')
+
+            elif cmdParamType == DT_INT32:
+                structString = structString + (' i')
+
+            elif cmdParamType == DT_FLOAT:
+                structString = structString + (' f')
+
+        print(structString)
+        cmdStruct = struct.Struct(structString)
+        return(cmdStruct)
+           
+
+    def SendCommand(self, cmdNumber, cmdParams = None):   # Отправляем комманду на контроллер
         
-        return packedMessage    # Возвращаем упакованное сообщение
+        if self.CommandList.get(cmdNumber) != None:  # Существует ли команда в словаре команд
 
+            cmdStruct = self.GetStructCommand(cmdNumber) # Узнаем структуру, длину команды и кол-во параметров
+            Cmd = (cmdNumber,) + cmdParams
+            packedCmd = cmdStruct.pack(*Cmd)
+            packedMessage = can.Message(arbitration_id = self.CanAddr,
+                                        extended_id = False,       
+                                        data = packedCmd)
+            self.Send(packedMessage)
+            
+            # Обработчик событий
+            if self.onSendCommand != None:
+                self.onSendCommand(*Cmd)
+
+        else:
+            print('Can`t found command with that number:%d' % cmdNumber)        
 
     # Отправка сообщения в шину
     def Send(self, msg):
@@ -194,6 +260,15 @@ class ControllerBase():
             print("Reciving error")
         return msg
 
+    def CheckConnection(self):
+        try:
+            self.ParamList[0x00][2] = 0 # Обнуляем параметр проверки связи если он есть
+        except:
+            pass
+            
+        self.isConnected = False
+        self.SetParam(0x00, MagicNumber)  # Задаем тестовый параметр для проверки подключения       
+   
     # Функция запускаемая в потоке. Отвечает за прием сообщений
     def ThreadRecv(self):
         global crash
@@ -207,7 +282,10 @@ class ControllerBase():
                 if self.ParamList.get(prmNumber) != None:  # Существует ли параметр в списке параметров
                     prmLengthRecv = inMsg.data[1]
 
-                    if inMsg.dlc == prmLengthRecv + 2:  # Два байта занято номером параметра и значением длины
+                    #if inMsg.dlc == prmLengthRecv + 2:  # Два байта занято номером параметра и значением длины
+                    if True:
+                        if inMsg.dlc > prmLengthRecv + 2:
+                            inMsg.data = inMsg.data[0:(prmLengthRecv + 2)]
                         prmStruct, prmLength = self.GetStructParam(self.ParamList[inMsg.data[0]][1])   # Выявление структуры и длины для данного типа сообщения
 
                         if prmLength == prmLengthRecv:  # Длина принятого параметра соответствует длине параметра в парам листе 
@@ -216,7 +294,18 @@ class ControllerBase():
                                 self.ParamList[prmNumber][2] = unpackedPrm[2] # Пробуем записать полученное значение параметра в список параметров
                             except:
                                 self.ParamList[prmNumber].append(unpackedPrm[2]) # Добавляем элемент в список параметров, если его еще не существует
-                            print('Param recieved. Name:%s  Value:%s' % (self.ParamList[prmNumber][0], str(self.ParamList[prmNumber][2])))
+
+                            if (prmNumber == 0x00) and (self.ParamList[0x00][2] == MagicNumber) and (self.isConnected == False): # Проверка соединения
+                                self.isConnected = True
+                                print('Device connected')
+
+                            # Обработчик событий
+
+                            if self.onGetParam != None:
+                                self.onGetParam(prmNumber, self.ParamList[prmNumber][2])
+
+                                
+                            #print('Param recieved. Name:%s  Value:%s' % (self.ParamList[prmNumber][0], str(self.ParamList[prmNumber][2])))
                             
                         else:
                             print('Recieved length not according with recieving type')
@@ -255,87 +344,80 @@ class ControllerMotor(ControllerBase):
             print("Crashed")
             crash = True
             sys.exit(1)
+            
+        # Дополняем словарь команд
+        self.CommandList.update({   
+                        # Команды управления
+                  # name, type, length
+            0xCC:['work mode', DT_UINT8], # пример. Переделать в списки. Название - тип. Параметр задавать не текстом, а номером.
+            0xCD:['clear odometres'],
+            0xCE:['PWM pulse'],    # Не известно
+            0xCF:['set PWM', DT_UINT8, DT_INT16],
+            0xD0:['set speed', DT_INT8, DT_INT16],
+            0xD1:['set all PWM', DT_INT16, DT_INT16],
+            0xD2:['set all speed', DT_INT16, DT_INT16],
+            0xD3:['power out', DT_UINT8, DT_UINT8]
 
-        '''
+                       })
 
-        CommandList = {
-                                # Команды управления
+        # Дополняем словарь параметров
+        self.ParamList.update({
+                # Параметры для чтения и записи
+            # name, type, (data)
+            0x01:['debug info mask', DT_UINT8],
+            0x02:['proportional coefficient', DT_FLOAT],
+            0x03:['integral coefficient', DT_FLOAT],
+            0x04:['derivative coefficient', DT_FLOAT],
+            0x05:['limit summ', DT_INT16],
+            0x06:['time PID', DT_UINT16],
+            0x07:['time PWM', DT_UINT16],
+            0x08:['pwm DeadZone', DT_UINT8],
+            0x09:['accelbreak step', DT_UINT8],
+            0x0A:['emergency level', DT_UINT16],
 
-                              #name, type, length
-                       0xC8:['work mode', dtUInt8], # пример. Переделать в списки. Название - тип. Параметр задавать не текстом, а номером.
-                       0xC9:['send parameters', dtNone, params],
-                       0xCA:['write in EEPROM', dtNone, startPositions],
-                       0xCB:['read from EEPROM', dtNone, startPositionsInEEPROM],
-                       0xCC:['clear odometres', dtNone, odometr],
-                       0xCD:['set PWM for same time', dtUnknown, timePWM],    # Не известно
-                       0xCE:['set PWM', dtUInt8Int16, PWM],
-                       0xCF:['set speed', dtInt8Int16, speed],
-                       0xD0:['set all PWM', dtInt16Int16, allPWM],
-                       0xD1:['set all speeds', dtInt16Int16, allSpeeds],
-                       0xD2:['power out', dtUInt8, powerStat],
+                    # Параметры только для чтения
 
-                       }
-                       '''
+            0x13:['Error Code', DT_UINT8],
+            0x14:['Work mode', DT_UINT8],
 
-
-        self.ParamList = {
-                                # Параметры для чтения и записи
-                                #name, type,(data)
-                       0x00:['debug info mask', DT_UINT8],
-                       0x01:['proportional coefficient', DT_FLOAT],
-                       0x02:['integral coefficient', DT_FLOAT],
-                       0x03:['derivative coefficient', DT_FLOAT],
-                       0x04:['limit summ', DT_INT16],
-                       0x05:['time PID', DT_UINT16],
-                       0x06:['time PWM', DT_UINT16],
-                       0x07:['pwm DeadZone', DT_UINT8],
-                       0x08:['accelbreak step', DT_UINT8],
-                       0x09:['emergency level', DT_UINT16],
-
-                               # Параметры только для чтения
-
-                       0x13:['Error Code', DT_UINT8],
-                       0x14:['Work mode', DT_UINT8],
-
-                       # 1 
+            # 1 
                        
-                       0x15:['pParrot1', DT_FLOAT],
-                       0x16:['iParrot1', DT_FLOAT],
-                       0x17:['dParrot1', DT_FLOAT],
-                       0x18:['res PWM1', DT_INT16],
-                       0x19:['current Parrot1', DT_INT16],
-                       0x1A:['encoder Data1', DT_INT32],
-                       0x1B:['Int summ1', DT_INT16],
-                       0x1C:['adc Average1', DT_UINT16],
-                       0x1D:['set Parrot1', DT_INT16],
-                       0x1E:['set PWM1', DT_INT16],
+            0x15:['pParrot1', DT_FLOAT],
+            0x16:['iParrot1', DT_FLOAT],
+            0x17:['dParrot1', DT_FLOAT],
+            0x18:['res PWM1', DT_INT16],
+            0x19:['current Parrot1', DT_INT16],
+            0x1A:['encoder Data1', DT_INT32],
+            0x1B:['Int summ1', DT_INT16],
+            0x1C:['adc Average1', DT_UINT16],
+            0x1D:['set Parrot1', DT_INT16],
+            0x1E:['set PWM1', DT_INT16],
 
-                       # 2 
+            # 2 
                        
-                       0x1F:['pParrot2', DT_FLOAT],
-                       0x20:['iParrot2', DT_FLOAT],
-                       0x21:['dParrot2', DT_FLOAT],
-                       0x22:['res PWM2', DT_INT16],
-                       0x23:['current Parrot2', DT_INT16],
-                       0x24:['encoder Data2', DT_INT32],
-                       0x25:['Int summ2', DT_INT16],
-                       0x26:['adc Average2', DT_UINT16],
-                       0x27:['set Parrot2', DT_INT16],
-                       0x28:['set PWM2', DT_INT16],
+            0x1F:['pParrot2', DT_FLOAT],
+            0x20:['iParrot2', DT_FLOAT],
+            0x21:['dParrot2', DT_FLOAT],
+            0x22:['res PWM2', DT_INT16],
+            0x23:['current Parrot2', DT_INT16],
+            0x24:['encoder Data2', DT_INT32],
+            0x25:['Int summ2', DT_INT16],
+            0x26:['adc Average2', DT_UINT16],
+            0x27:['set Parrot2', DT_INT16],
+            0x28:['set PWM2', DT_INT16],
                        
-                      }
+                      })
 
       
-    def Mode(self, workMode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - включить ручной режим, 0 - пока используется как выключение ручного режима)
+    def SetWorkMode(self, workMode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - включить ручной режим, 0 - пока используется как выключение ручного режима)
+        self.SendCommand(0xCC, (workMode,))
         
-        initMessage = can.Message(arbitration_id = self.CanAddr, extended_id = False,      # extended_id - фолс - 11 бит, тру - 29 
-                                  data = [200, workMode])  
-        self.Send(initMessage)
+    def SetAllSpeed(self, speed1, speed2): # Установить скорость мотора (0 и 1)
+        self.SendCommand(0xD2, (speed1, speed2))
 
-    def SetMotorSpeed(self, motorNumber, speed): # Установить скорость мотора (0 и 1)
-        prmNumber = 0xcf
-        data = self.Pack(prmNumber, motorNumber, speed)    # Пакуем сообщение, чтобы переслать его в корректном виде
-        self.Send(data)  
+    def SetSpeed(self, motorNumber, speed): # Установить скорость мотора (0 и 1)
+        self.SendCommand(0xD0, (motorNumber, speed))
+
 
 ################## КАК ЗАДАВАТЬ ШИМ? ############
     def SetMotorPWM(self, motorNumber, PWM): 
@@ -382,4 +464,3 @@ class ControllerStepper(ControllerBase):
         can_msg_steppers_pos = struct.Struct('=I 5B 3H')
         can_msg_steppers_pos_data = can_msg_steppers_pos.pack(self.can_addr, 7, 0, 0, 0, 0xD0, steps1, steps2, steps3)
         self.Send(can_msg_steppers_pos_data)
-        
