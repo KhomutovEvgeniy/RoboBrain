@@ -237,7 +237,10 @@ class ControllerBase():
         if self.__CommandList.get(cmdNumber) != None:  # Существует ли команда в словаре команд
 
             cmdStruct = self.GetStructCommand(cmdNumber) # Узнаем структуру, длину команды и кол-во параметров
-            Cmd = (cmdNumber,) + cmdParams
+            if cmdParams != None:
+                Cmd = (cmdNumber,) + cmdParams
+            else:
+                Cmd = (cmdNumber,)
             packedCmd = cmdStruct.pack(*Cmd)
             packedMessage = can.Message(arbitration_id = self.CanAddr,
                                         extended_id = False,       

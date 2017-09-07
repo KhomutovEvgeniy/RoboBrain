@@ -41,20 +41,20 @@ class ControllerStepper(ControllerBase):
 
             # Первый ШД
             0x01:['Debug info mask', DT_UINT8],
-            0x02:['Calibrate step length', DT_UINT16],
+            0x02:['Calibrate step length', DT_UINT16],  #
             0x03:['Min step length', DT_INT16],
             0x04:['Max step length', DT_INT16],
             0x05:['Accel brake step', DT_UINT16],
 
-            0x06:['Motor state', DT_UINT8],
-            0x07:['Motor mode', DT_UINT8],
+            0x06:['Motor state', DT_UINT8],             #
+            0x07:['Motor mode', DT_UINT8],              #
             0x08:['Set velocity', DT_INT16],
             0x09:['Current velocity', DT_INT16],
             
             0x0A:['Set position', DT_UINT16],
             0x0B:['Current position', DT_INT16],
-            0x0C:['Motor calibrate state', DT_UINT8],
-            0x0D:['Calibrate range', DT_UINT16],
+            0x0C:['Motor calibrate state', DT_UINT8],   #
+            0x0D:['Calibrate range', DT_UINT16],        #
 
             # Второй ШД
             0x0E:['Debug info mask', DT_UINT8],
