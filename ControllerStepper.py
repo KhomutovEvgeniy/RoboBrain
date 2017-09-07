@@ -20,6 +20,9 @@ class ControllerStepper(ControllerBase):
         self.BasicOnGetParam = self.BasicOnGetParamNew
         self.onGetParam = None
 
+        # Стандартные параметры доступных длин осей в шагах шагового двигателя
+
+        self.calibrateRange = [4496, 2915, 1216] # Для оранжевой головы риты
 
         # Дополняем словарь команд
         self.__CommandList = self._ControllerBase__CommandList.update({
@@ -110,13 +113,55 @@ class ControllerStepper(ControllerBase):
         self.SendCommand(0xD0, (stepperN, calibType))
 
     def SetPosition(self, stepperN, position):
-        self.SendCommand(0xCF, (stepperN, position))
+        # Задание углов
+        angles = [270, 208, 180]
 
-    def SetAllPositions(self, position1, position2, position3):
-        self.SendCommand(0xD1, (position1, position2, position3))
+        # Установка предельных значений углов
+        limits = [130, 100, 85]
+
+        # Обработка заданной в углах позиции
+        if abs(position)>limits[stepperN]:
+            position = limits[stepperN]*(position//abs(position))
+
+        # Преобразование углов в количество шагов
+     
+        position = (self.calibrateRange[stepperN]//angles[stepperN])*(angles[stepperN]//2 + position)
+
+        self.SendCommand(0xCF, (stepperN, position))
+        
+
+    def SetAllPositions(self, position0, position1, position2): # Позиции задаются в углах. От -135 до 135, от -105 до 105, от -90 до 90
+
+        # Обработка позиций
+        # Установка предельных значений углов
+
+        limits = [130, 100, 85]
+        
+        if abs(position0)>limits[0]:
+            position0 = limits[0]*(position0//abs(position0))
+
+        if abs(position1)>limits[1]:
+            position1 = limits[1]*(position1//abs(position1))
+
+        if abs(position2)>limits[2]:
+            position2 = limits[2]*(position2//abs(position2))
+
+        # Преобразование углов в количество шагов
+        
+        position0 = (self.calibrateRange[0]//270)*(135 + position0)
+        position1 = (self.calibrateRange[1]//210)*(105 + position1)
+        position2 = (self.calibrateRange[2]//180)*(90 + position2)
+
+        self.SendCommand(0xD1, (position0, position2, position1)) # Позиции в прошивке этой команды перепутаны, в ней моторы нумеруются 0,2,1
 
     # Функция, вызываемая при приеме параметра
     def BasicOnGetParamNew(self, prmNumber, prm):
         super().BasicOnGetParam(prmNumber, prm) # Функция вызываемая при приеме параметра, описанная в модуле ControllerBase 
         if self.onGetParam != None:
             self.onGetParam(prmNumber, prm)
+
+        # При приеме сообщения после калибровки (количество доступных шагов по трём осям)
+        for i in range (3):
+            if prmNumber == 0x0D+i*13:
+                self.calibrateRange[i] = prm
+                print('Calibrate steps: ', self.calibrateRange)

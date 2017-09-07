@@ -29,12 +29,12 @@ CS.SendParam(0x1F, 2)'''
 #CS.SendCommand(0xC9)
 
 time.sleep(2)
-CS.SetWorkMode(2)
+#CS.SetWorkMode(2)
 
-CS.SetAllPositions(300,300,300)
-
+#CS.SetAllPositions(2245,606,1450) # Стартер поз
+#CS.SetAllPositions(-90,-90,-90) # Стартер поз
 # Необходимо перед заданием позиций узнавать количество доступных шагов по каждой оси. После этого можно сохранять эти шкалы и относительно них задавать позиции.
-
+CS.SetPosition(1,0)
 #CS.Calibrate(0,0)
 #CS.Calibrate(1,0)
 #CS.Calibrate(2,0)
