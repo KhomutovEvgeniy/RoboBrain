@@ -23,6 +23,7 @@ class ControllerMotor(ControllerBase):
 
         # Обработчики
         self.BasicOnGetParam = self.BasicOnGetParamNew
+        self.onGetParam = None
         self.OnOdometryChanged = None
         self.OnSpeedChanged = None
 
@@ -91,10 +92,10 @@ class ControllerMotor(ControllerBase):
                       })
 
     def SetDebugInfoMask(self, tahometr = 1, odometr = 1, firstMotorData = 0, secondMotorData = 0, electricCurrent = 0):
-        dimValue = tahometr*128 + odometr*64 + firstMotorData*32 + secondMotorData*16 + electricCurrent*8
+        dimValue = tahometr + odometr*2 + firstMotorData*4 + secondMotorData*8 + electricCurrent*16
         self.SendParam(0x01, dimValue)
 
-    def SetWorkMode(self, workMode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - включить ручной режим, 0 - пока используется как выключение ручного режима)
+    def SetWorkMode(self, workMode = 0):        # Инициализация режима работы (2 - ШИМ, 1 - ПИД, 0 - пока используется как выключение ручного режима)
         self.SendCommand(0xCC, (workMode,))
         
     def SetAllSpeed(self, speed1, speed2): # Установить скорость мотора (0 и 1)
@@ -133,9 +134,12 @@ class ControllerMotor(ControllerBase):
         self.MotorParam = (tuple(information[0]), tuple(information[1]))
 
         super().BasicOnGetParam(prmNumber, prm) # Функция вызываемая при приеме параметра, описанная в модуле ControllerBase 
+        if self.onGetParam != None:
+            self.onGetParam(prmNumber, prm)
 
 
 ################## КАК ЗАДАВАТЬ ШИМ? ############
-    def SetMotorPWM(self, motorNumber, PWM): 
-        pass
+    def SetMotorPWM(self, motorNumber, PWM):
+        self.SendCommand(0xCF, (motorNumber, PWM))
+        
 #################################################

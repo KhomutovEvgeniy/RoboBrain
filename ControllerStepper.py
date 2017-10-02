@@ -114,7 +114,7 @@ class ControllerStepper(ControllerBase):
 
     def SetPosition(self, stepperN, position):
         # Задание углов
-        angles = [270, 208, 180]
+        angles = [270, 210, 140]
 
         # Установка предельных значений углов
         limits = [130, 100, 85]
@@ -125,7 +125,8 @@ class ControllerStepper(ControllerBase):
 
         # Преобразование углов в количество шагов
      
-        position = (self.calibrateRange[stepperN]//angles[stepperN])*(angles[stepperN]//2 + position)
+        position = int((self.calibrateRange[stepperN]/angles[stepperN])*(angles[stepperN]//2 + position))
+        print(position)
 
         self.SendCommand(0xCF, (stepperN, position))
         

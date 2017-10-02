@@ -1,6 +1,7 @@
 from ControllerMotor import *
 from ControllerServo import *
 from ControllerStepper import *
+import queue
 
 crash = False
 
@@ -83,57 +84,74 @@ class Robot():
         self.deviceList.append(device)  # Добавляем в список устройств
 
     # Функция запускаемая в потоке. Отвечает за прием сообщений
+    def PreThreadRecv(self):
+        global crash
+
+        self.queueRecvMsg = queue.LifoQueue()
+        while not (crash or self.stopRecv):
+            inMsg = self.Recv()                      # Получение сообщения
+            self.queueRecvMsg.put(inMsg)
+            
+    # Функция запускаемая в потоке. Отвечает за обработку принятых сообщений
     def ThreadRecv(self):
         global crash
 
         while not (crash or self.stopRecv):
-            inMsg = self.Recv()                      # Получение сообщения
 
-            if (inMsg.arbitration_id == 0x501) and (inMsg.dlc == 7):
-                answer = struct.Struct('=2H 3B').unpack(inMsg.data)
-                device = (answer[2], answer[0], answer[3], answer[4])
-                self.answeredDeviceList.append(device)
-                print('Device type:%d  CAN ID:%X  Soft version:%d.%d' %(answer[2], answer[0], answer[3], answer[4]))
+            if not self.queueRecvMsg.empty(): # Если список сообщений не пуст
                 
+                inMsg = self.queueRecvMsg.get()                      # Извлечение сообщения из списка
 
-            for device in self.deviceList: # Пробегаемся по всем устройствам
+                if (inMsg.arbitration_id == 0x501) and (inMsg.dlc == 7):
+                    answer = struct.Struct('=2H 3B').unpack(inMsg.data)
+                    device = (answer[2], answer[0], answer[3], answer[4])
+                    self.answeredDeviceList.append(device)
+                    print('Device type:%d  CAN ID:%X  Soft version:%d.%d' %(answer[2], answer[0], answer[3], answer[4]))
+                    
 
-                if inMsg.arbitration_id == (device.CanAddr + 0xFF): # Если нам ответило устройство с адрессом равным адрессу устройства которое мы сейчас проверяем в цикле
-                    prmNumber = inMsg.data[0]
+                for device in self.deviceList: # Пробегаемся по всем устройствам
 
-                    if device.ParamExist(prmNumber):  # Существует ли параметр в списке параметров данного устройства
-                        prmLengthRecv = inMsg.data[1]
+                    if inMsg.arbitration_id == (device.CanAddr + 0xFF): # Если нам ответило устройство с адрессом равным адрессу устройства которое мы сейчас проверяем в цикле
+                        prmNumber = inMsg.data[0]
 
-                        #if inMsg.dlc == prmLengthRecv + 2:  # Два байта занято номером параметра и значением длины
-                        if True:
-                            if inMsg.dlc > prmLengthRecv + 2:
-                                inMsg.data = inMsg.data[0:(prmLengthRecv + 2)]
-                            prmStruct, prmLength = device.GetStructParam(device.GetParam(inMsg.data[0], 1))   # Выявление структуры и длины для данного типа сообщения
+                        if device.ParamExist(prmNumber):  # Существует ли параметр в списке параметров данного устройства
+                            prmLengthRecv = inMsg.data[1]
 
-                            if prmLength == prmLengthRecv:  # Длина принятого параметра соответствует длине параметра в парам листе 
-                                unpackedPrm = prmStruct.unpack(inMsg.data)
-                                device.SetParam(prmNumber, unpackedPrm[2])  # Пробуем записать полученное значение параметра в список параметров
+                            #if inMsg.dlc == prmLengthRecv + 2:  # Два байта занято номером параметра и значением длины
+                            if True:
+                                if inMsg.dlc > prmLengthRecv + 2:
+                                    inMsg.data = inMsg.data[0:(prmLengthRecv + 2)]
+                                prmStruct, prmLength = device.GetStructParam(device.GetParam(inMsg.data[0], 1))   # Выявление структуры и длины для данного типа сообщения
 
-                                if (prmNumber == 0x00) and (device.GetParam(0x00) == MagicNumber) and (device.isConnected == False): # Проверка соединения
-                                    device.__isConnected = True
-                                    print('Device "%s" (CAN ID: %X) connected' % (device.ControllerName, device.CanAddr))
+                                if prmLength == prmLengthRecv:  # Длина принятого параметра соответствует длине параметра в парам листе 
+                                    unpackedPrm = prmStruct.unpack(inMsg.data)
+                                    device.SetParam(prmNumber, unpackedPrm[2])  # Пробуем записать полученное значение параметра в список параметров
 
-                                # Обработчик событий
+                                    if (prmNumber == 0x00) and (device.GetParam(0x00) == MagicNumber) and (device.isConnected == False): # Проверка соединения
+                                        device.__isConnected = True
+                                        print('Device "%s" (CAN ID: %X) connected' % (device.ControllerName, device.CanAddr))
 
-                                if device.BasicOnGetParam != None:
-                                    device.BasicOnGetParam(prmNumber, device.GetParam(prmNumber))
+                                    # Обработчик событий
 
-                                #print('Param recieved. Name:%s  Value:%s' % (self.ParamList[prmNumber][0], str(self.ParamList[prmNumber][2])))
+                                    if device.BasicOnGetParam != None:
+                                        device.BasicOnGetParam(prmNumber, device.GetParam(prmNumber))
+
+                                    #print('Param recieved. Name:%s  Value:%s' % (self.ParamList[prmNumber][0], str(self.ParamList[prmNumber][2])))
+                                else:
+                                    print('Recieved length not according with recieving type')
                             else:
-                                print('Recieved length not according with recieving type')
+                                print('Recieved dlc not according with data length')
                         else:
-                            print('Recieved dlc not according with data length')
-                    else:
-                        print('Попытка принять неизвестный параметр:%d' % prmNumber)
+                            print('Попытка принять неизвестный параметр:%d' % prmNumber)
+            else:
+                time.sleep(0.1) # Если список сообщений пуст, ждем 
 
     # Функция запускающая поток прослушивания кэн 
     def StartRecv(self):
         self.stopRecv = False
+        PreRecvThread = threading.Thread(target = self.PreThreadRecv)
+        PreRecvThread.start()
+        time.sleep(0.1)
         RecvThread = threading.Thread(target = self.ThreadRecv)
         RecvThread.start()
         self.StartRecv = self.ZeroFunction                
