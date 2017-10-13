@@ -9,7 +9,7 @@ import sys
 # Индикатор, в случае ошибки завершающий отправку онлайнов
 crash = False
 
-# Магическое число (любое число от 0 до 255) для проверки подключения
+# Магическое число (могло бы быть любое число от 0 до 255) для проверки подключения
 MagicNumber = 42
                 
 
@@ -45,7 +45,7 @@ class ControllerBase():
         self.OnGetParam = None # При принятии параметра вызывается функция BasicOnGetParam, если она определена пользователем
         self.OnSetParam = None # При задании параметра
         self.OnSendCommand = None # При даче команды
-        self.BasicOnGetParam = None # При принятии параметра вызывается функция BasicOnGetParam
+        #self.BasicOnGetParam = None # При принятии параметра вызывается функция BasicOnGetParam
         # Список параметров
         self.__ParamList = {0x00:['Test connection', DT_UINT8]}
 
@@ -230,7 +230,7 @@ class ControllerBase():
 
         cmdStruct = struct.Struct(structString)
         return(cmdStruct)
-           
+
 
     def SendCommand(self, cmdNumber, cmdParams = None):   # Отправляем комманду на контроллер
         
@@ -238,7 +238,15 @@ class ControllerBase():
 
             cmdStruct = self.GetStructCommand(cmdNumber) # Узнаем структуру, длину команды и кол-во параметров
             if cmdParams != None:
-                Cmd = (cmdNumber,) + cmdParams
+                # В зависимости от того, в каком виде пользователь указал параметр команды, запаковываем его в кортеж
+                if type(cmdParams) == tuple:
+                    Cmd = (cmdNumber,) + cmdParams
+                elif type(cmdParams) == list:
+                    Cmd = (cmdNumber,) + tuple(cmdParams)
+                elif type(cmdParams) == int:
+                    Cmd = (cmdNumber, cmdParams)
+                else:
+                    print('Error: Uncorrect type of cmdParams')
             else:
                 Cmd = (cmdNumber,)
             packedCmd = cmdStruct.pack(*Cmd)

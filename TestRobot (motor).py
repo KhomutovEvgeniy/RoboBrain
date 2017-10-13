@@ -1,4 +1,8 @@
+#!/usr/bin/env python3
+
+
 from Robot import*
+
 def ARBUZIUS(prmNumber, prm):
     print('prmNumber:%s  param:%d' % (hex(prmNumber), prm))
 
@@ -6,11 +10,19 @@ Marvin = Robot('can0')
 
 CM1 = ControllerMotor(Marvin)
 CM1.onGetParam = ARBUZIUS
-time.sleep(300)
-'''
+time.sleep(3)
+
+CS = ControllerServo(Marvin)
+
+
 Marvin.online = True
 
-CM1.SetWorkMode(2)
+CM1.SetMotorPWM(0, 220)
+time.sleep(5)
+
+Marvin.online = False
+
+'''
 CM1.SetMotorPWM(0, -180)
 CM1.SetMotorPWM(1, -180)
 

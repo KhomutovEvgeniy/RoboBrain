@@ -23,7 +23,7 @@ class ControllerServo(ControllerBase):
                            (None, None))
 
         # Дополняем словарь команд
-        self.__CommandList.update({   
+        self.__CommandList = self._ControllerBase__CommandList.update({   
             # Команды управления
             # name, type
             0xCD:['set start pos'],
@@ -32,7 +32,7 @@ class ControllerServo(ControllerBase):
                        })
 
         # Дополняем словарь параметров
-        self.__ParamList.update({
+        self.__ParamList = self._ControllerBase__ParamList.update({
             # Параметры для чтения и записи
             # name, type, (data)
             0x01:['servo position 0', DT_UINT8, 0],

@@ -18,7 +18,7 @@ class ControllerStepper(ControllerBase):
             sys.exit(1)
             
         self.BasicOnGetParam = self.BasicOnGetParamNew
-        self.onGetParam = None
+        self.OnGetParam = None
 
         # Стандартные параметры доступных длин осей в шагах шагового двигателя
 
@@ -158,8 +158,8 @@ class ControllerStepper(ControllerBase):
     # Функция, вызываемая при приеме параметра
     def BasicOnGetParamNew(self, prmNumber, prm):
         super().BasicOnGetParam(prmNumber, prm) # Функция вызываемая при приеме параметра, описанная в модуле ControllerBase 
-        if self.onGetParam != None:
-            self.onGetParam(prmNumber, prm)
+        if self.OnGetParam != None:
+            self.OnGetParam(prmNumber, prm)
 
         # При приеме сообщения после калибровки (количество доступных шагов по трём осям)
         for i in range (3):

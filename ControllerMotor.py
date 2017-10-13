@@ -23,7 +23,7 @@ class ControllerMotor(ControllerBase):
 
         # Обработчики
         self.BasicOnGetParam = self.BasicOnGetParamNew
-        self.onGetParam = None
+        self.OnGetParam = None
         self.OnOdometryChanged = None
         self.OnSpeedChanged = None
 
@@ -104,6 +104,9 @@ class ControllerMotor(ControllerBase):
     def SetSpeed(self, motorNumber, speed): # Установить скорость мотора (0 и 1)
         self.SendCommand(0xD0, (motorNumber, speed))
 
+    def SetMotorPWM(self, motorNumber, PWM):
+        self.SendCommand(0xCF, (motorNumber, PWM))
+
     # Функция, вызываемая при приеме параметра    
     def BasicOnGetParamNew(self, prmNumber, prm):
 
@@ -134,12 +137,6 @@ class ControllerMotor(ControllerBase):
         self.MotorParam = (tuple(information[0]), tuple(information[1]))
 
         super().BasicOnGetParam(prmNumber, prm) # Функция вызываемая при приеме параметра, описанная в модуле ControllerBase 
-        if self.onGetParam != None:
-            self.onGetParam(prmNumber, prm)
+        if self.OnGetParam != None:
+            self.OnGetParam(prmNumber, prm)
 
-
-################## КАК ЗАДАВАТЬ ШИМ? ############
-    def SetMotorPWM(self, motorNumber, PWM):
-        self.SendCommand(0xCF, (motorNumber, PWM))
-        
-#################################################

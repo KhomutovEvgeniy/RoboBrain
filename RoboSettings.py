@@ -299,6 +299,10 @@ class MainWindow(Gtk.Window):
         self.add(grid)
         self.GraphicFlag = 0
 
+        # Блокиратор для полей вывода parrot и encoder
+        self.blockedParrot = False
+        self.blockedEncoder = False
+
         # Defines
 
         self.MotorNumber = 0
@@ -466,12 +470,14 @@ class MainWindow(Gtk.Window):
         grid.attach(self.labelCurrentParrot1, 2, 7, 1, 1)
         self.entryCurrentParrot1 = Gtk.Entry()
         self.entryCurrentParrot1.set_text('Unknown')
+        self.entryCurrentParrot1.set_sensitive(False)
         grid.attach(self.entryCurrentParrot1, 3, 7, 1, 1)
 
         self.labelEncoderData1 = Gtk.Label('Encoder Data')
         grid.attach(self.labelEncoderData1, 4, 7, 1, 1)
         self.entryEncoderData1 = Gtk.Entry()
         self.entryEncoderData1.set_text('Unknown')
+        self.entryEncoderData1.set_sensitive(False)
         grid.attach(self.entryEncoderData1, 5, 7, 1, 1)
 
 
@@ -814,9 +820,8 @@ class MainWindow(Gtk.Window):
         elif prmNumber == 0x19 + 0x0A*self.MotorNumber:
             if self.entryCurrentParrot1.get_text() != prm:
                 currentParrotValue = prm
-                if self.counter1 == 10:
-                    self.entryCurrentParrot1.set_text(str(prm))
-                    self.entryCurrentParrot1.show_all()
+                if self.counter1 == 1:
+                    self.SetTextParrot(self.entryCurrentParrot1, prm)
                     self.counter1 = 0
                 else:
                     self.counter1 += 1
@@ -824,9 +829,8 @@ class MainWindow(Gtk.Window):
 
         elif prmNumber == 0x1A + 0x0A*self.MotorNumber:
             if self.entryEncoderData1.get_text() != prm:
-                if self.counter2 == 10:
-                    self.entryEncoderData1.set_text(str(prm))
-                    self.entryEncoderData1.show_all()
+                if self.counter2 == 1:
+                    self.SetTextEncoder(self.entryEncoderData1, prm)
                     self.counter2 = 0
                 else:
                     self.counter2 += 1
@@ -847,7 +851,21 @@ class MainWindow(Gtk.Window):
                 self.entrySetPWM1.set_text(str(prm))'''
         #time.sleep(0.07)
         
-        
+    def SetTextParrot(self, widget, prm): # Обращение к полям вывода по функциям сделано для того чтобы ограничить возможности одновременного обращения к полю вывода нескольких обьектов 
+        if not self.blockedParrot:
+            self.blockedParrot = True
+            widget.set_text(str(prm))
+            widget.show_all()
+            time.sleep(0.05)
+            self.blockedParrot = False
+            
+    def SetTextEncoder(self, widget, prm): # Обращение к полям вывода по функциям сделано для того чтобы ограничить возможности одновременного обращения к полю вывода нескольких обьектов 
+        if not self.blockedEncoder:
+            self.blockedEncoder = True
+            widget.set_text(str(prm))
+            widget.show_all()
+            time.sleep(0.05)
+            self.blockedEncoder = False
 
             
 Droideka = Robot('can0')
