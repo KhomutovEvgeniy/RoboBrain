@@ -262,7 +262,6 @@ class ControllerBase():
         else:
             print('Can`t found command with that number:%d' % cmdNumber)        
 
-        
     def CheckConnection(self):
         try:
             self.__ParamList[0x00][2] = 0 # Обнуляем параметр проверки связи если он есть

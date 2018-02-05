@@ -1,3 +1,12 @@
+
+
+
+########## ЗАКОМЕНТИЛ ЧАСТЬ ФУНКЦИЙ SetTextParrot и SetTextEncoder Т.К. НЕ УВЕРЕН В НИХ, ПРИЛОЖЕНИЕ РАБОТАЕТ НЕ КОРРЕКТНО, НЕОБХОДИМО ПРОВЕРИТЬ ДАННЫЕ ФУНКЦИИ
+
+
+
+
+
 #!/usr/bin/python3
 
 from Robot import *
@@ -435,6 +444,10 @@ class MainWindow(Gtk.Window):
         self.buttonReadFromEPROM.connect("clicked", self.onReadFromEPROMClicked)
         grid.attach(self.buttonReadFromEPROM, 3, 13, 2, 1)
 
+        self.buttonRoboStop = Gtk.Button(label=" STOP ROBOT ")
+        self.buttonRoboStop.connect("clicked", self.onRoboStopClicked)
+        grid.attach(self.buttonRoboStop, 2, 14, 2, 1)
+
         # Labels
 
         self.LabelSetWorkMode = Gtk.Label(" Set Work Mode ")
@@ -560,15 +573,14 @@ class MainWindow(Gtk.Window):
         self.checkButtonElectricCurrent.connect('toggled', self.onCheckButtonElectricCurrentClicked)
         self.checkBox.pack_start(self.checkButtonElectricCurrent, True, True, 0)
 
-        # KOSTYIL
+        # KOSTYIL PRODUCTION
 
-        self.counter1 = 0 # Счетчики для ограничения частоты вывода полей CurrentParrot1 и EncoderData1
-        self.counter2 = 0
+    def onRoboStopClicked(self, widget):
+        self.CM.SetAllSpeed(0, 0)
 
     def onMotorNumberClicked(self, widget):
         self.MotorNumber = int(self.entryMotorNumber.get_text())
         
-
     def onWriteInEPROMClicked(self, widget):
         self.CM.SendCommand(0xCA)
         
@@ -665,7 +677,7 @@ class MainWindow(Gtk.Window):
     
     def onControllerMotorClicked(self, widget):
         self.CM = ControllerMotor(Droideka, int(self.entryAddr.get_text()))
-        self.CM.onGetParam = self.Raspredelitel
+        self.CM.OnGetParam = self.Raspredelitel
         Droideka.online = True
         time.sleep(0.01)
         # Запросить состояние debugInfoMask
@@ -819,21 +831,13 @@ class MainWindow(Gtk.Window):
             
         elif prmNumber == 0x19 + 0x0A*self.MotorNumber:
             if self.entryCurrentParrot1.get_text() != prm:
-                currentParrotValue = prm
-                if self.counter1 == 1:
-                    self.SetTextParrot(self.entryCurrentParrot1, prm)
-                    self.counter1 = 0
-                else:
-                    self.counter1 += 1
+                currentParrotValue = prm # Для графика
+                threading.Thread(target = self.SetTextParrot, args = (self.entryCurrentParrot1, prm)).start()
                 
 
         elif prmNumber == 0x1A + 0x0A*self.MotorNumber:
             if self.entryEncoderData1.get_text() != prm:
-                if self.counter2 == 1:
-                    self.SetTextEncoder(self.entryEncoderData1, prm)
-                    self.counter2 = 0
-                else:
-                    self.counter2 += 1
+                threading.Thread(target = self.SetTextEncoder, args = (self.entryEncoderData1, prm)).start()
 
         elif prmNumber == 0x1B + 0x0A*self.MotorNumber:
             #if self.entryIntSumm1.get_text() != prm:
@@ -858,6 +862,8 @@ class MainWindow(Gtk.Window):
             widget.show_all()
             time.sleep(0.05)
             self.blockedParrot = False
+        else:
+            print('Кракозябра1')
             
     def SetTextEncoder(self, widget, prm): # Обращение к полям вывода по функциям сделано для того чтобы ограничить возможности одновременного обращения к полю вывода нескольких обьектов 
         if not self.blockedEncoder:
@@ -866,7 +872,8 @@ class MainWindow(Gtk.Window):
             widget.show_all()
             time.sleep(0.05)
             self.blockedEncoder = False
-
+        else:
+            print('Кракозябра2')
             
 Droideka = Robot('can0')
 

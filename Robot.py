@@ -87,7 +87,7 @@ class Robot():
     def PreThreadRecv(self):
         global crash
 
-        self.queueRecvMsg = queue.LifoQueue()
+        self.queueRecvMsg = queue.Queue()
         while not (crash or self.stopRecv):
             inMsg = self.Recv()                      # Получение сообщения
             self.queueRecvMsg.put(inMsg)
@@ -164,3 +164,7 @@ class Robot():
     # Для блокирования доступа к ф-ии будем присваивать ей значение пустой функции
     def ZeroFunction(self):
         pass
+
+    def Exit(self):
+        global crash
+        crash = True

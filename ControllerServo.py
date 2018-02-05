@@ -63,6 +63,18 @@ class ControllerServo(ControllerBase):
         else:
             print('Uncorrect number of servo')
 
+
+    def SetZeroPos(self, servoNumber, position):
+        if 0 <= servoNumber < 8:
+            if position > 250:
+                position = 250
+            prmNumber = 0x09 + servoNumber
+            self.SendParam(0xCD, prmNumber, position)
+        else:
+            print('Uncorrect number of servo')
+        
+
+
     def GetServoPos(self, servoNumber):
         return self.__ParamList[servoNumber][2]
         
@@ -90,8 +102,6 @@ class ControllerServo(ControllerBase):
         super().BasicOnGetParam(prmNumber, prm) # Функция вызываемая при приеме параметра, описанная в модуле ControllerBase 
 
     
-
-    #def SetZeroPos()
 
     def SetPowerOut(self, powerOutNumber, state):
         if 0 <= powerOutNumber < 2:
